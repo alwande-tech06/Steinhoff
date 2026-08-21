@@ -35,6 +35,16 @@ OXBLOOD = "#A8434E"
 PLUM = "#8C6A9B"
 GOOD = "#5B9370"
 
+# Accent set borrowed from a Power BI manufacturing-analytics reference: used only
+# for neutral, non-severity series (magnitudes, model comparisons, category fills).
+# Never used where colour carries a finding — that stays moss/mustard/oxblood.
+PBI_PURPLE = "#8B2FC9"
+PBI_VIOLET = "#A855F7"
+PBI_TEAL = "#2DD4BF"
+PBI_PINK = "#EC4899"
+PBI_BLUE = "#4F8FEF"
+PBI_PALETTE = [PBI_PURPLE, PBI_TEAL, PBI_PINK, PBI_BLUE]
+
 PHASE_COLOURS = {"Before": MOSS, "During": MUSTARD, "After": OXBLOOD}
 STATUS_COLOUR = {"Healthy": GOOD, "Warning": MUSTARD, "Critical": OXBLOOD, "No data": "#4A3F36"}
 ZONE_COLOUR = {"Safe": GOOD, "Grey": MUSTARD, "Distress": OXBLOOD}
@@ -69,9 +79,15 @@ h1 {{ font-size: 2.15rem; margin-bottom: .1rem; }}
 h3 {{ font-size: 1.2rem; margin-top: .3rem; }}
 .block-container {{ padding-top: 2rem; }}
 
-.masthead {{ border-bottom: 1px solid {LINE}; padding-bottom: .75rem; margin-bottom: 1rem; }}
+.masthead {{ background: linear-gradient(120deg, {PBI_PURPLE} 0%, {PBI_VIOLET} 55%, {PBI_PURPLE} 100%);
+  border-radius: 8px; padding: 1.4rem 1.7rem 1.15rem; margin: -.4rem 0 1.3rem 0;
+  box-shadow: 0 6px 28px rgba(139,47,201,.28); }}
+.masthead h1 {{ color: #FFFFFF; letter-spacing: .01em; }}
 .masthead .sub {{ font-family: 'IBM Plex Mono', monospace; font-size: .72rem;
-  color: {MUTED}; letter-spacing: .11em; text-transform: uppercase; }}
+  color: rgba(255,255,255,.8); letter-spacing: .11em; text-transform: uppercase; }}
+
+.stTabs [data-baseweb="tab-highlight"] {{ background-color: {PBI_PURPLE} !important; }}
+.stTabs [aria-selected="true"] p {{ color: {PBI_VIOLET} !important; }}
 
 .card {{ background: {SURFACE}; border: 1px solid {LINE};
   border-left: 3px solid var(--tone, {MOSS}); border-radius: 2px;
@@ -206,6 +222,47 @@ def kpi(container, label, value, delta="", tone=MOSS):
         unsafe_allow_html=True)
 
 
+def gauge(container, label, value, vmax, healthy, warn, higher_is_better, needle, suffix="%"):
+    """OEE-style dial. The needle colour is a neutral accent; the background steps
+    stay the ok/warn/critical severity colours so the finding still reads at a glance.
+    """
+    v = 0.0 if value is None or pd.isna(value) else float(value)
+    raw_disp = v * 100 if suffix == "%" else v
+    dmax = vmax * 100 if suffix == "%" else vmax
+    dhealthy = healthy * 100 if suffix == "%" else healthy
+    dwarn = warn * 100 if suffix == "%" else warn
+    disp = max(0.0, min(raw_disp, dmax))
+    if higher_is_better:
+        steps = [dict(range=[0, dwarn], color=OXBLOOD),
+                 dict(range=[dwarn, dhealthy], color=MUSTARD),
+                 dict(range=[dhealthy, dmax], color=GOOD)]
+    else:
+        steps = [dict(range=[0, dhealthy], color=GOOD),
+                 dict(range=[dhealthy, dwarn], color=MUSTARD),
+                 dict(range=[dwarn, dmax], color=OXBLOOD)]
+    def fade(hexcolor, alpha=.25):
+        h = hexcolor.lstrip("#")
+        r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+        return f"rgba({r},{g},{b},{alpha})"
+
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number", value=disp,
+        number=dict(suffix=suffix, font=dict(family="IBM Plex Mono", size=22, color=TEXT)),
+        gauge=dict(
+            axis=dict(range=[0, dmax], tickfont=dict(color=MUTED, size=9), nticks=3),
+            bar=dict(color=needle, thickness=.28),
+            bgcolor=SURFACE, borderwidth=0,
+            steps=[dict(range=s["range"], color=fade(s["color"])) for s in steps],
+        )))
+    fig.update_layout(height=190, margin=dict(l=32, r=32, t=28, b=6),
+                       paper_bgcolor="rgba(0,0,0,0)",
+                       font=dict(family="IBM Plex Sans", color=TEXT),
+                       title=dict(text=label, font=dict(size=12, color=MUTED), x=.5))
+    container.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    if raw_disp != disp:
+        container.caption(f"Pegged at dial edge — actual value {raw_disp:,.1f}{suffix}.")
+
+
 def rm(v, dec=0):
     if v is None or (isinstance(v, float) and pd.isna(v)):
         return "—"
@@ -283,6 +340,19 @@ with tabs[0]:
     kpi(cards[5], "Critical findings", str(int((checks_f.severity == "Critical").sum())),
         "in the captured data", OXBLOOD)
 
+    st.markdown(f"#### Health at a glance — FY{last}")
+    st.caption("Dial colour bands are the same healthy/warning/critical thresholds as the "
+               "scorecard; the needle itself is just a styling accent.")
+    g = st.columns(4)
+    gauge(g[0], "Current ratio", ratios.at[last, "current_ratio"], 2.5, 1.5, 1.0,
+          higher_is_better=True, needle=PBI_PURPLE, suffix="x")
+    gauge(g[1], "Debt ratio", ratios.at[last, "debt_ratio"], 1.0, 0.5, 0.65,
+          higher_is_better=False, needle=PBI_TEAL)
+    gauge(g[2], "Goodwill share of assets", ratios.at[last, "goodwill_pct_assets"], 1.0, 0.15, 0.25,
+          higher_is_better=False, needle=PBI_PINK)
+    gauge(g[3], "Cash conversion", ratios.at[last, "cash_conversion"], 1.5, 0.8, 0.4,
+          higher_is_better=True, needle=PBI_BLUE)
+
     st.markdown(f"<div class='note'><b>Reading the colour.</b> Green marks FY{YEARS[0]}"
                 f"&ndash;FY{pre_scandal_end} before disclosure, mustard FY{pre_scandal_end + 1}"
                 f"&ndash;FY{scandal_end} the scandal period, oxblood FY{scandal_end + 1} onward "
@@ -293,11 +363,11 @@ with tabs[0]:
     c1, c2 = st.columns([3, 2])
     with c1:
         fig = go.Figure()
-        fig.add_bar(x=ratios_f.index, y=ratios_f["revenue"], marker_color=MOSS, name="Revenue",
+        fig.add_bar(x=ratios_f.index, y=ratios_f["revenue"], marker_color=PBI_PURPLE, name="Revenue",
                     width=.6, hovertemplate="FY%{x}<br>R%{y:,.0f}m<extra></extra>")
         fig.add_scatter(x=ratios_f.index, y=ratios_f["profit"], mode="lines+markers", name="Profit",
-                        line=dict(color=BRONZE, width=2, dash="dot"),
-                        marker=dict(size=8, symbol="diamond", color=BRONZE),
+                        line=dict(color=PBI_TEAL, width=2, dash="dot"),
+                        marker=dict(size=8, symbol="diamond", color=PBI_TEAL),
                         hovertemplate="FY%{x}<br>%{y:,.0f}m<extra></extra>")
         phase_bands(fig)
         show(fig, 400, legend=True)
@@ -336,8 +406,8 @@ with tabs[1]:
     c1, c2 = st.columns(2)
     with c1:
         fig = go.Figure()
-        for lab, key, colour in [("Return on assets", "return_on_assets", MOSS),
-                                 ("Return on equity", "return_on_equity", BRONZE)]:
+        for lab, key, colour in [("Return on assets", "return_on_assets", PBI_PURPLE),
+                                 ("Return on equity", "return_on_equity", PBI_TEAL)]:
             ser = ratios_f[key].dropna()
             fig.add_scatter(x=ser.index, y=ser.values, mode="lines+markers", name=lab,
                             line=dict(color=colour, width=2), marker=dict(size=8),
@@ -349,7 +419,7 @@ with tabs[1]:
         ser = ratios_f["asset_turnover"].dropna()
         fig = go.Figure()
         fig.add_scatter(x=ser.index, y=ser.values, mode="lines+markers",
-                        line=dict(color=PLUM, width=2), marker=dict(size=8),
+                        line=dict(color=PBI_BLUE, width=2), marker=dict(size=8),
                         hovertemplate="FY%{x}<br>%{y:.2f}x<extra></extra>")
         phase_bands(fig)
         show(fig, 340)
@@ -376,8 +446,8 @@ with tabs[2]:
     c1, c2 = st.columns(2)
     with c1:
         fig = go.Figure()
-        for lab, key, colour in [("Current ratio", "current_ratio", MOSS),
-                                 ("Quick ratio", "quick_ratio", BRONZE)]:
+        for lab, key, colour in [("Current ratio", "current_ratio", PBI_PURPLE),
+                                 ("Quick ratio", "quick_ratio", PBI_TEAL)]:
             ser = ratios_f[key].dropna()
             fig.add_scatter(x=ser.index, y=ser.values, mode="lines+markers", name=lab,
                             line=dict(color=colour, width=2), marker=dict(size=8),
@@ -404,7 +474,7 @@ with tabs[2]:
     if not comp.empty:
         piv = comp.pivot_table(index="fy", columns="line_item", values="value", aggfunc="first")
         fig = go.Figure()
-        for col, colour in zip(piv.columns, [MUSTARD, BRONZE, MOSS, PLUM, GOOD]):
+        for col, colour in zip(piv.columns, [PBI_PURPLE, PBI_TEAL, PBI_PINK, PBI_BLUE, PBI_VIOLET]):
             fig.add_bar(x=piv.index, y=piv[col], name=col, marker_color=colour,
                         hovertemplate="FY%{x}<br>" + col + " %{y:,.0f}m<extra></extra>")
         fig.update_layout(barmode="stack")
@@ -442,7 +512,7 @@ with tabs[3]:
                         unsafe_allow_html=True)
         else:
             fig = go.Figure()
-            fig.add_bar(x=acc.index, y=acc.values, width=.6, marker_color=BRONZE,
+            fig.add_bar(x=acc.index, y=acc.values, width=.6, marker_color=PBI_BLUE,
                         hovertemplate="FY%{x}<br>%{y:.1%}<extra></extra>")
             phase_bands(fig)
             show(fig, 360, ytick=".0%")
@@ -542,7 +612,7 @@ with tabs[4]:
         exact = prices_f[prices_f["exact"]]
         fig = go.Figure()
         fig.add_scatter(x=exact["date"], y=exact["price"], mode="lines+markers",
-                        line=dict(color=BRONZE, width=2),
+                        line=dict(color=PBI_BLUE, width=2),
                         marker=dict(size=12, color=[PHASE_COLOURS.get(p, MOSS)
                                                     for p in exact["phase"]]),
                         customdata=exact[["event", "source"]].values,
@@ -593,11 +663,11 @@ with tabs[5]:
     c1, c2 = st.columns(2)
     with c1:
         fig = go.Figure()
-        for name in an.SCENARIOS:
+        for (name, colour) in zip(an.SCENARIOS, PBI_PALETTE):
             p = an.project(base, name, tax_rate)
             fig.add_scatter(x=p.index, y=p["revenue"], mode="lines+markers", name=name,
-                            line=dict(width=2, dash="solid" if name == scenario else "dot"),
-                            marker=dict(size=7),
+                            line=dict(width=2, color=colour, dash="solid" if name == scenario else "dot"),
+                            marker=dict(size=7, color=colour),
                             hovertemplate=name + " FY%{x}<br>%{y:,.0f}m<extra></extra>")
         fig.add_scatter(x=[base["fy"]], y=[base["revenue"]], mode="markers", name="Base year",
                         marker=dict(size=11, color=TEXT, symbol="square"))
@@ -605,10 +675,10 @@ with tabs[5]:
         st.caption("Projected revenue on each scenario, from the last pre-disclosure base year.")
     with c2:
         fig = go.Figure()
-        fig.add_bar(x=proj.index, y=proj["fcff"], width=.6, marker_color=MOSS, name="FCFF",
+        fig.add_bar(x=proj.index, y=proj["fcff"], width=.6, marker_color=PBI_PURPLE, name="FCFF",
                     hovertemplate="FY%{x}<br>FCFF %{y:,.0f}m<extra></extra>")
         fig.add_scatter(x=proj.index, y=proj["ebit"], mode="lines+markers", name="EBIT",
-                        line=dict(color=BRONZE, width=2), marker=dict(size=8),
+                        line=dict(color=PBI_TEAL, width=2), marker=dict(size=8),
                         hovertemplate="FY%{x}<br>EBIT %{y:,.0f}m<extra></extra>")
         show(fig, 360, legend=True)
         st.caption("Free cash flow to the firm and operating profit under the selected scenario.")
@@ -661,7 +731,7 @@ with tabs[6]:
         fig = go.Figure()
         fig.add_bar(x=list(val["pv_by_year"].index) + ["Terminal"],
                     y=list(val["pv_by_year"].values) + [val["pv_terminal"]],
-                    marker_color=[MOSS] * len(val["pv_by_year"]) + [MUSTARD], width=.6,
+                    marker_color=[PBI_PURPLE] * len(val["pv_by_year"]) + [PBI_PINK], width=.6,
                     hovertemplate="%{x}<br>%{y:,.0f}m<extra></extra>")
         show(fig, 340)
         st.caption("Present value by year and the terminal value.")
@@ -716,10 +786,10 @@ with tabs[7]:
                     "brief actually poses.</div>", unsafe_allow_html=True)
     cards = st.columns(4)
     lin_m, tree_m = res["metrics"]["Linear Regression"]["test"], res["metrics"]["Decision Tree"]["test"]
-    kpi(cards[0], "Linear Regression R²", f"{lin_m['R2']:.3f}", f"RMSE {lin_m['RMSE']:,.3f}", MOSS)
-    kpi(cards[1], "Linear Regression MAE", f"{lin_m['MAE']:,.3f}", f"MAPE {lin_m['MAPE']:.1f}%", MOSS)
-    kpi(cards[2], "Decision Tree R²", f"{tree_m['R2']:.3f}", f"RMSE {tree_m['RMSE']:,.3f}", BRONZE)
-    kpi(cards[3], "Decision Tree MAE", f"{tree_m['MAE']:,.3f}", f"MAPE {tree_m['MAPE']:.1f}%", BRONZE)
+    kpi(cards[0], "Linear Regression R²", f"{lin_m['R2']:.3f}", f"RMSE {lin_m['RMSE']:,.3f}", PBI_PURPLE)
+    kpi(cards[1], "Linear Regression MAE", f"{lin_m['MAE']:,.3f}", f"MAPE {lin_m['MAPE']:.1f}%", PBI_PURPLE)
+    kpi(cards[2], "Decision Tree R²", f"{tree_m['R2']:.3f}", f"RMSE {tree_m['RMSE']:,.3f}", PBI_TEAL)
+    kpi(cards[3], "Decision Tree MAE", f"{tree_m['MAE']:,.3f}", f"MAPE {tree_m['MAPE']:.1f}%", PBI_TEAL)
 
     better = "Linear Regression" if lin_m["R2"] >= tree_m["R2"] else "Decision Tree"
     st.markdown(f"<div class='note'><b>On these measures {better} performs better.</b> "
@@ -746,15 +816,15 @@ with tabs[7]:
         fig.add_scatter(x=x, y=res["actual"][:n], mode="lines", name="Actual",
                         line=dict(color=TEXT, width=2))
         fig.add_scatter(x=x, y=res["predictions"]["Linear Regression"][:n], mode="lines",
-                        name="Linear Regression", line=dict(color=MOSS, width=1.6))
+                        name="Linear Regression", line=dict(color=PBI_PURPLE, width=1.6))
         fig.add_scatter(x=x, y=res["predictions"]["Decision Tree"][:n], mode="lines",
-                        name="Decision Tree", line=dict(color=BRONZE, width=1.6, dash="dot"))
+                        name="Decision Tree", line=dict(color=PBI_TEAL, width=1.6, dash="dot"))
         show(fig, 340, legend=True)
     with c2:
         st.markdown("#### What each model relies on")
         imp = res["importance"].head(8)
         fig = go.Figure()
-        fig.add_bar(x=imp["importance"], y=imp["feature"], orientation="h", marker_color=BRONZE,
+        fig.add_bar(x=imp["importance"], y=imp["feature"], orientation="h", marker_color=PBI_PINK,
                     hovertemplate="%{y}<br>%{x:.3f}<extra></extra>")
         fig.update_yaxes(autorange="reversed")
         show(fig, 340)
@@ -775,7 +845,7 @@ with tabs[7]:
         st.markdown("#### Steinhoff scored on its own ratios")
         piv = res["company_scores"].pivot(index="fy", columns="model", values="distress_index")
         fig = go.Figure()
-        for name, colour in [("Linear Regression", MOSS), ("Decision Tree", BRONZE)]:
+        for name, colour in [("Linear Regression", PBI_PURPLE), ("Decision Tree", PBI_TEAL)]:
             if name in piv.columns:
                 fig.add_scatter(x=piv.index, y=piv[name], mode="lines+markers", name=name,
                                 line=dict(color=colour, width=2), marker=dict(size=9),
