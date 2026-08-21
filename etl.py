@@ -434,7 +434,7 @@ def load_all(path: str | Path):
 
 if __name__ == "__main__":
     import sys
-    src = sys.argv[1] if len(sys.argv) > 1 else "Steinhoff_-Dashboard_Data-Version_2.xlsx"
+    src = sys.argv[1] if len(sys.argv) > 1 else "Steinhoff Data-Version 2 2026.xlsx"
     s, r, c, e, sc, pr, d, b = load_all(src)
     pd.set_option("display.width", 220)
     print(f"lines={len(s)}  years={sorted(set(s.fy))}")

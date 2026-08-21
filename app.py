@@ -39,7 +39,7 @@ PHASE_COLOURS = {"Before": MOSS, "During": MUSTARD, "After": OXBLOOD}
 STATUS_COLOUR = {"Healthy": GOOD, "Warning": MUSTARD, "Critical": OXBLOOD, "No data": "#4A3F36"}
 ZONE_COLOUR = {"Safe": GOOD, "Grey": MUSTARD, "Distress": OXBLOOD}
 
-DATA_FILE = "Steinhoff_-Dashboard_Data-Version_2.xlsx"
+DATA_FILE = "Steinhoff Data-Version 2 2026.xlsx"
 
 st.set_page_config(page_title="Steinhoff Financial Intelligence Dashboard",
                    layout="wide", initial_sidebar_state="expanded")

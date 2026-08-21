@@ -1,6 +1,6 @@
 # Steinhoff International — Financial Intelligence Dashboard
 
-**Built against `Steinhoff_-Dashboard_Data-Version_2.xlsx`.**
+**Built against `Steinhoff Data-Version 2 2026.xlsx`.**
 
 Covers Question 4 in full: 4.1 analytics, 4.2 business intelligence, 4.3 forecasting,
 4.4 machine learning, 4.5 valuation.
@@ -97,7 +97,8 @@ disclosure — the clearest single answer to whether warning signs existed.
 
 - The balance sheet does not balance in FY2012–FY2016; the workbook discloses this on its own
   balance check row and the dashboard repeats it rather than correcting it
-- Cash flow runs FY2013–FY2017; FY2018 is missing, so accruals and cash conversion stop there
+- Cash flow now runs FY2013–FY2018, so accruals and cash conversion are computable across the
+  full period
 - Share price exists only as six sourced anchor points, not a series. Enough to chart the collapse
   for 4.2; not enough to train a model for 4.4. A daily 2015–2017 series is what is still needed
 - Dividends and peer multiples not captured; the sidebar inputs are placeholders
