@@ -201,19 +201,25 @@ def ddm(dps: float, growth: float, ke: float) -> float | None:
 
 
 def relative_value(proj: pd.DataFrame, base: dict, peer_pe: float, peer_ev_ebitda: float,
-                   shares_m: float, net_debt: float, tax_rate: float = 0.28) -> pd.DataFrame:
+                   shares_m: float, net_debt: float, tax_rate: float = 0.28,
+                   peer_pb: float | None = None) -> pd.DataFrame:
     """Multiples applied to the first projected year."""
     fy = proj.index[0]
     ebitda = float(proj.at[fy, "ebitda"])
     earnings = float(proj.at[fy, "nopat"])
+    book_equity = float(proj.at[fy, "total_equity"])
     rows = []
     if peer_pe and shares_m:
         eq = earnings * peer_pe
-        rows.append(dict(method=f"P/E multiple ({peer_pe:.1f}x)", equity_value=eq,
+        rows.append(dict(method=f"P/E multiple ({peer_pe:.2f}x)", equity_value=eq,
                          value_per_share=eq / shares_m))
     if peer_ev_ebitda and shares_m:
         ev = ebitda * peer_ev_ebitda
         eq = ev - net_debt
-        rows.append(dict(method=f"EV/EBITDA multiple ({peer_ev_ebitda:.1f}x)",
+        rows.append(dict(method=f"EV/EBITDA multiple ({peer_ev_ebitda:.2f}x)",
                          equity_value=eq, value_per_share=eq / shares_m))
+    if peer_pb and shares_m:
+        eq = book_equity * peer_pb
+        rows.append(dict(method=f"P/B multiple ({peer_pb:.2f}x)", equity_value=eq,
+                         value_per_share=eq / shares_m))
     return pd.DataFrame(rows)

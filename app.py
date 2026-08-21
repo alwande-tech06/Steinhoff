@@ -196,9 +196,14 @@ term_g = sb.slider("Terminal growth", 0.0, 0.06, 0.025, 0.005)
 
 sb.markdown("---")
 sb.markdown("**Share and peer inputs**")
+sb.caption("P/E, EV/EBITDA and P/B default to the unit-corrected medians of Mr Price, "
+           "Foschini and Lewis. Only the P/E median is fully reliable — EV/EBITDA rests "
+           "on two of three peers (Lewis's EBITDA looks miscaptured) and the P/B spread "
+           "is wide (0.75x–6.30x), so treat that one with caution.")
 shares_m = sb.number_input("Shares in issue (millions)", 100.0, 10000.0, 4300.0, 50.0)
-peer_pe = sb.number_input("Peer P/E multiple", 0.0, 40.0, 14.0, 0.5)
-peer_ev = sb.number_input("Peer EV/EBITDA multiple", 0.0, 30.0, 9.0, 0.5)
+peer_pe = sb.number_input("Peer P/E multiple", 0.0, 40.0, 14.05, 0.05)
+peer_ev = sb.number_input("Peer EV/EBITDA multiple", 0.0, 30.0, 10.70, 0.05)
+peer_pb = sb.number_input("Peer P/B multiple", 0.0, 15.0, 3.22, 0.05)
 dps = sb.number_input("Dividend per share (base year)", 0.0, 50.0, 0.0, 0.05)
 
 ke = an.cost_of_equity(risk_free, beta, erp)
@@ -749,7 +754,8 @@ with tabs[6]:
         st.caption("Value per share across the two assumptions the result is most sensitive to.")
 
     st.markdown("#### Cross-check against other methods")
-    rel = an.relative_value(proj, base, peer_pe, peer_ev, shares_m, base["net_debt"], tax_rate)
+    rel = an.relative_value(proj, base, peer_pe, peer_ev, shares_m, base["net_debt"], tax_rate,
+                            peer_pb=peer_pb)
     ddm_v = an.ddm(dps, term_g, ke)
     rows = [dict(method="Discounted cash flow", equity_value=val["equity_value"],
                  value_per_share=val["value_per_share"])]
@@ -765,9 +771,18 @@ with tabs[6]:
                     "share has been captured. Enter the base-year dividend in the sidebar, or "
                     "capture the dividend history, and the method appears above.</div>",
                     unsafe_allow_html=True)
-    st.markdown("<div class='note'><b>Peer multiples are placeholders</b> until peer data is "
-                "captured. The multiples in the sidebar are inputs, not sourced comparables, and "
-                "must be replaced before anything here is quoted.</div>", unsafe_allow_html=True)
+    st.markdown("<div class='note'><b>Peer multiples are sourced, with caveats.</b> The sidebar "
+                "defaults are unit-corrected medians of Mr Price, Foschini and Lewis (from a "
+                "capture that mixed cents/rand and millions/billions across companies — every "
+                "conversion is logged and re-derivable). The P/E median is reliable. EV/EBITDA "
+                "rests on two of three peers, since Lewis's captured EBITDA produces an implausible "
+                "0.76x and looks miscaptured rather than genuinely cheap. P/B spans 0.75x to 6.30x "
+                "across the three peers, so that cross-check carries the least weight. Two of the "
+                "three peer net-debt figures were converted on an inferred unit (billions, not "
+                "millions) and still await verification against the published annual reports, and "
+                "no financial year is stated for the peer figures in the source, so comparability "
+                "across peers is not guaranteed. Steinhoff's own dividend per share is still not "
+                "captured, so the DDM above cannot run.</div>", unsafe_allow_html=True)
 
 
 # --------------------------------------------------------------------------
