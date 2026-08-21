@@ -19,15 +19,15 @@ import etl
 import ml
 
 # --------------------------------------------------------------------------
-# Visual identity: a warm archive palette. Ink-brown ground, moss for neutral
-# series, bronze for secondary, mustard and oxblood reserved strictly for
-# deterioration, so colour always carries a finding.
+# Visual identity: deep purple ground throughout (Power BI accent, blended in),
+# moss/mustard/oxblood reserved strictly for deterioration, so colour always
+# carries a finding.
 # --------------------------------------------------------------------------
-INK = "#17130F"
-SURFACE = "#221C17"
-LINE = "#3A2F26"
+INK = "#150C22"
+SURFACE = "#1F1330"
+LINE = "#3D2A54"
 TEXT = "#F2EAE1"
-MUTED = "#A3948A"
+MUTED = "#A99BC0"
 MOSS = "#6F9E86"
 BRONZE = "#C08552"
 MUSTARD = "#D4A017"
@@ -108,7 +108,7 @@ table.reg th {{ font-family: 'IBM Plex Mono', monospace; font-size: .64rem;
   letter-spacing: .1em; text-transform: uppercase; color: {MUTED}; text-align: left;
   padding: .45rem .55rem; border-bottom: 1px solid {LINE}; }}
 table.reg td {{ padding: .5rem .55rem; border-bottom: 1px solid {LINE}; vertical-align: top; }}
-table.reg td.per {{ font-family: 'IBM Plex Mono', monospace; color: {BRONZE}; white-space: nowrap; }}
+table.reg td.per {{ font-family: 'IBM Plex Mono', monospace; color: {PBI_BLUE}; white-space: nowrap; }}
 .stDataFrame {{ border: 1px solid {LINE}; }}
 footer, #MainMenu {{ visibility: hidden; }}
 header[data-testid="stHeader"] {{ background: {INK}; }}
@@ -657,7 +657,7 @@ with tabs[5]:
     kpi(cards[0], "Base revenue", rm(base["revenue"]), f"FY{base['fy']} ZAR m", MOSS)
     kpi(cards[1], "FY2021 projected revenue", rm(proj.at[2021, "revenue"]), scenario, MOSS)
     kpi(cards[2], "FY2021 projected equity", rm(proj.at[2021, "total_equity"]), scenario, MOSS)
-    kpi(cards[3], "Cumulative FCFF", rm(proj["fcff"].sum()), "five years", BRONZE)
+    kpi(cards[3], "Cumulative FCFF", rm(proj["fcff"].sum()), "five years", PBI_TEAL)
     kpi(cards[4], "Base net debt", rm(base["net_debt"]), f"FY{base['fy']}", MUSTARD)
 
     c1, c2 = st.columns(2)
@@ -720,11 +720,11 @@ with tabs[6]:
     kpi(cards[1], "Equity value", rm(val["equity_value"]), "less net debt",
         MOSS if val["equity_value"] > 0 else OXBLOOD)
     kpi(cards[2], "Value per share", f"R{val['value_per_share']:,.2f}",
-        f"{shares_m:,.0f}m shares", BRONZE)
+        f"{shares_m:,.0f}m shares", PBI_TEAL)
     kpi(cards[3], "Terminal value share",
         pct(val["pv_terminal"] / val["enterprise_value"]) if val["enterprise_value"] else "—",
         "of enterprise value", MUSTARD)
-    kpi(cards[4], "Cost of equity", pct(ke), f"beta {beta:.2f}", PLUM)
+    kpi(cards[4], "Cost of equity", pct(ke), f"beta {beta:.2f}", PBI_PINK)
 
     c1, c2 = st.columns([2, 3])
     with c1:
@@ -873,7 +873,7 @@ with tabs[8]:
     kpi(cards[1], "High", str(int((checks_f.severity == "High").sum())),
         "capture and comparability", MUSTARD)
     kpi(cards[2], "Blocking", str(int((checks_f.severity == "Blocking").sum())),
-        "data not captured at all", PLUM)
+        "data not captured at all", PBI_VIOLET)
 
     show_c = checks_f.copy()
     show_c["fy"] = show_c["fy"].map(lambda v: "" if pd.isna(v) else str(int(v)))
