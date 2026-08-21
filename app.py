@@ -19,15 +19,15 @@ import etl
 import ml
 
 # --------------------------------------------------------------------------
-# Visual identity: deep purple ground throughout (Power BI accent, blended in),
+# Visual identity: light-blue ground with a purple accent (Power BI, blended in),
 # moss/mustard/oxblood reserved strictly for deterioration, so colour always
 # carries a finding.
 # --------------------------------------------------------------------------
-INK = "#150C22"
-SURFACE = "#1F1330"
-LINE = "#3D2A54"
-TEXT = "#F2EAE1"
-MUTED = "#A99BC0"
+INK = "#E4F1FC"
+SURFACE = "#FFFFFF"
+LINE = "#C4DCEE"
+TEXT = "#132840"
+MUTED = "#5E7C93"
 MOSS = "#6F9E86"
 BRONZE = "#C08552"
 MUSTARD = "#D4A017"
@@ -289,7 +289,8 @@ def style(fig, height=380, ytick=None, legend=False):
         showlegend=legend,
         legend=dict(orientation="h", y=1.12, x=0, font=dict(size=11, color=MUTED),
                     bgcolor="rgba(0,0,0,0)"),
-        hoverlabel=dict(bgcolor=INK, font_size=12, font_family="IBM Plex Sans"),
+        hoverlabel=dict(bgcolor=SURFACE, font_size=12, font_family="IBM Plex Sans", font_color=TEXT,
+                        bordercolor=LINE),
     )
     fig.update_xaxes(showgrid=False, linecolor=LINE, ticks="outside", tickcolor=LINE,
                      tickfont=dict(family="IBM Plex Mono", size=11, color=MUTED))
