@@ -51,6 +51,21 @@ ZONE_COLOUR = {"Safe": GOOD, "Grey": MUSTARD, "Distress": OXBLOOD}
 
 DATA_FILE = "Steinhoff Data-Version 2 2026.xlsx"
 
+# Steinhoff's own dividend per share, from the raw peer-data capture (Peer Data.pdf).
+# No unit is stated in the source. Read as EUR cents, not EUR or ZAR: at face value a
+# FY2016 dividend of EUR12.00 against a EUR5.30 share price would be a ~225% yield,
+# which is not credible, while EUR0.12 against EUR5.30 (~2.3%) is a normal payout —
+# and 2018 being nil matches the historical fact that Steinhoff suspended dividends
+# after the December 2017 disclosure. This mirrors the cents-inference already applied
+# to the peer EPS/DPS figures in the unit-corrected peer comparables. FLAGGED pending
+# verification against Steinhoff's published annual reports.
+STEINHOFF_DPS_EUR_CENTS = {2013: 5.82, 2014: 10.73, 2015: 10.73, 2016: 12.00, 2017: 3.00, 2018: 0.0}
+# The same source also carries a Steinhoff share-price series (2013 3.20 ... 2018 0.12,
+# apparently EUR Frankfurt-listing quotes). That series is NOT used here: it contradicts
+# the ZAR anchor points already captured in the main workbook's SharePrice_Data sheet
+# (e.g. R95.00 in April 2016 vs a EUR quote of 5.30 the same year), consistent with the
+# unit-corrected peer comparables' finding on this exact series.
+
 st.set_page_config(page_title="Steinhoff Financial Intelligence Dashboard",
                    layout="wide", initial_sidebar_state="expanded")
 
@@ -182,8 +197,10 @@ sb.caption("Nothing below is a finding. Each is an input an assessor can vary.")
 
 scenario = sb.selectbox("Forecast scenario", list(an.SCENARIOS), index=1)
 tax_rate = sb.slider("Corporate tax rate", 0.15, 0.35, 0.28, 0.01)
-# Version 2 restates every year in rand, so no conversion assumption is needed.
-zar_per_eur = 1.0
+# Version 2 restates the main workbook's own figures in rand, so this rate has no effect
+# there. It exists to convert the separately-captured, EUR-denominated Steinhoff dividend
+# below into rand.
+zar_per_eur = sb.number_input("EUR/ZAR rate (for the dividend, below)", 10.0, 22.0, 16.0, 0.5)
 
 sb.markdown("---")
 sb.markdown("**Cost of capital**")
@@ -204,7 +221,34 @@ shares_m = sb.number_input("Shares in issue (millions)", 100.0, 10000.0, 4300.0,
 peer_pe = sb.number_input("Peer P/E multiple", 0.0, 40.0, 14.05, 0.05)
 peer_ev = sb.number_input("Peer EV/EBITDA multiple", 0.0, 30.0, 10.70, 0.05)
 peer_pb = sb.number_input("Peer P/B multiple", 0.0, 15.0, 3.22, 0.05)
-dps = sb.number_input("Dividend per share (base year)", 0.0, 50.0, 0.0, 0.05)
+dps_cents = STEINHOFF_DPS_EUR_CENTS.get(base["fy"], 0.0)
+dps_default = round(dps_cents / 100 * zar_per_eur, 2)
+dps = sb.number_input("Dividend per share (base year, ZAR)", 0.0, 50.0, dps_default, 0.05)
+sb.caption(f"Defaults to FY{base['fy']}'s dividend from the raw peer-data capture "
+           f"({dps_cents:.2f} EUR cents, i.e. EUR{dps_cents / 100:.2f} — FLAGGED, read as "
+           "cents, unverified) converted at the rate above. Steinhoff paid no dividend "
+           "from FY2018 on.")
+
+# Dividend/peer-multiple status depends on these sidebar inputs, not the workbook, so
+# it's appended to the integrity register here rather than computed inside etl.py.
+dyn_checks = []
+if dps > 0:
+    dyn_checks.append(dict(fy=None, severity="High", check="Dividend per share is a flagged inference",
+                           detail="Read from an unlabelled raw capture as EUR cents and converted "
+                                  "at a sidebar exchange rate; feeds the DDM in 4.5. Not yet verified "
+                                  "against the published annual reports."))
+else:
+    dyn_checks.append(dict(fy=None, severity="Blocking", check="Dividend per share not captured",
+                           detail="Required for sub-question 4.5."))
+if peer_pe or peer_ev or peer_pb:
+    dyn_checks.append(dict(fy=None, severity="High", check="Peer multiples partially verified",
+                           detail="Unit-corrected medians of Mr Price, Foschini and Lewis. The P/E "
+                                  "median is reliable; EV/EBITDA rests on two of three peers; P/B "
+                                  "spans 0.75x-6.30x. See the Valuation tab note for detail."))
+else:
+    dyn_checks.append(dict(fy=None, severity="Blocking", check="Peer company multiples not captured",
+                           detail="Required for sub-question 4.5."))
+checks_f = pd.concat([checks_f, pd.DataFrame(dyn_checks)], ignore_index=True)
 
 ke = an.cost_of_equity(risk_free, beta, erp)
 wacc_v = an.wacc(ke, kd, tax_rate, eq_weight)
@@ -781,8 +825,12 @@ with tabs[6]:
                 "three peer net-debt figures were converted on an inferred unit (billions, not "
                 "millions) and still await verification against the published annual reports, and "
                 "no financial year is stated for the peer figures in the source, so comparability "
-                "across peers is not guaranteed. Steinhoff's own dividend per share is still not "
-                "captured, so the DDM above cannot run.</div>", unsafe_allow_html=True)
+                "across peers is not guaranteed. The dividend now feeding the DDM above is also "
+                "FLAGGED: Steinhoff's own DPS history has no stated currency or unit in the source "
+                "capture, so it is read as EUR cents (the same inference already applied to the peer "
+                "EPS/DPS figures) and converted to rand at the sidebar's EUR/ZAR rate — both the unit "
+                "and the rate need verification against the published annual reports before this "
+                "method is quoted.</div>", unsafe_allow_html=True)
 
 
 # --------------------------------------------------------------------------

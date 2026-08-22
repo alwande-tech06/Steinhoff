@@ -370,9 +370,9 @@ def run_checks(statements: pd.DataFrame, prices: pd.DataFrame) -> pd.DataFrame:
                               "Interpolating between anchors would fabricate the very data the "
                               "models are then evaluated on.")))
 
-    for miss, sub in [("Dividends per share", "4.5"), ("Peer company multiples", "4.5")]:
-        f.append(dict(fy=None, severity="Blocking", check=f"{miss} not captured",
-                      detail=f"Required for sub-question {sub}."))
+    # Dividend per share and peer multiples are not part of this workbook — they're
+    # sourced separately and their status (captured, flagged, or still missing) depends
+    # on the sidebar's current inputs, so that finding is appended dynamically in app.py.
 
     return pd.DataFrame(f)
 
