@@ -978,22 +978,6 @@ with tabs[7]:
 # TAB 9 — Data & integrity
 # --------------------------------------------------------------------------
 with tabs[8]:
-    st.markdown("### Integrity register")
-
-    cards = st.columns(3)
-    kpi(cards[0], "Critical", str(int((checks_f.severity == "Critical").sum())),
-        "balance sheet does not balance", OXBLOOD)
-    kpi(cards[1], "High", str(int((checks_f.severity == "High").sum())),
-        "capture and comparability", MUSTARD)
-    kpi(cards[2], "Blocking", str(int((checks_f.severity == "Blocking").sum())),
-        "data not captured at all", PBI_VIOLET)
-
-    show_c = checks_f.copy()
-    show_c["fy"] = show_c["fy"].map(lambda v: "" if pd.isna(v) else str(int(v)))
-    st.dataframe(show_c.rename(columns={"fy": "Year", "severity": "Severity",
-                                        "check": "Finding", "detail": "Detail"}),
-                 use_container_width=True, hide_index=True)
-
     st.markdown("### Recomputed ratios")
     st.caption("Recomputed from the captured statement lines, not read from the workbook's own "
                "ratio sheet, so each figure traces to a line item.")
