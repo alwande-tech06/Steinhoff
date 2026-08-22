@@ -7,6 +7,7 @@ Run with:  streamlit run app.py
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import numpy as np
@@ -152,11 +153,98 @@ def run_ml(_ratios: pd.DataFrame, folder: str):
     return ml.run(_ratios, folder=folder)
 
 
-if not Path(DATA_FILE).exists():
-    st.error(f"Capture workbook not found: {DATA_FILE}")
+@st.cache_data(show_spinner=False)
+def parse_cashflow_csv(file_bytes: bytes):
+    """Long or wide CSV: a 'line_item' column plus either a 'fy'+'value' pair or one
+    column per year. line_item may be the workbook's own source label or the
+    standardised name etl.py maps it to — both resolve to the same row.
+    """
+    import io
+    df = pd.read_csv(io.BytesIO(file_bytes))
+    df.columns = [str(c).strip() for c in df.columns]
+    if "line_item" not in df.columns:
+        raise ValueError("Missing required column 'line_item'.")
+    label_to_std = etl.CF_MAP
+    valid_std = set(label_to_std.values())
+
+    def resolve(label):
+        label = str(label).strip()
+        if label in label_to_std:
+            return label_to_std[label]
+        if label in valid_std:
+            return label
+        return None
+
+    if {"fy", "value"}.issubset(df.columns):
+        long = df[["line_item", "fy", "value"]].copy()
+    else:
+        year_cols = [c for c in df.columns if c != "line_item" and str(c).strip().isdigit()]
+        if not year_cols:
+            raise ValueError("Expected either 'fy' and 'value' columns, or one column per year.")
+        long = df.melt(id_vars=["line_item"], value_vars=year_cols,
+                       var_name="fy", value_name="value")
+    long["line_item"] = long["line_item"].map(resolve)
+    long = long.dropna(subset=["line_item", "value"])
+    long["fy"] = long["fy"].astype(int)
+    long["value"] = long["value"].astype(float)
+    if long.empty:
+        raise ValueError("No recognised cash-flow line items after matching against the "
+                         f"standard names: {sorted(valid_std)}.")
+    long["statement"] = "cashflow"
+    long["currency"] = "ZAR"
+    long["phase"] = long["fy"].map(etl.PHASE_BY_YEAR)
+    return long[["statement", "line_item", "fy", "value", "currency", "phase"]]
+
+
+st.sidebar.markdown("### Upload your own data")
+st.sidebar.caption("Optional, and only for this session. Replaces the bundled workbook and/or "
+                   "its cash flow figures; every ratio and chart recomputes from whatever is "
+                   "loaded, the same way they would if the bundled file changed.")
+uploaded_xlsx = st.sidebar.file_uploader("Capture workbook (.xlsx)", type=["xlsx"],
+    help="Same shape as the bundled file — Income Statement, Financial Position, Cash Flow, "
+         "RedFlags_Timeline, SharePrice_Data and Distress_Models sheets.")
+uploaded_cf_csv = st.sidebar.file_uploader("Cash flow only (.csv)", type=["csv"],
+    help="Columns: 'line_item' plus either 'fy' and 'value', or one column per year. "
+         "line_item must match a standard cash-flow line — see the caption below if it's "
+         "rejected. Applies on top of the workbook above.")
+st.sidebar.markdown("---")
+
+active_data_file = DATA_FILE
+if uploaded_xlsx is not None:
+    upload_dir = Path("uploads")
+    upload_dir.mkdir(exist_ok=True)
+    file_bytes = uploaded_xlsx.getvalue()
+    digest = hashlib.md5(file_bytes).hexdigest()[:12]
+    saved_path = upload_dir / f"{digest}_{uploaded_xlsx.name}"
+    if not saved_path.exists():
+        saved_path.write_bytes(file_bytes)
+    try:
+        load(str(saved_path))  # validate before switching — raises on a malformed workbook
+        active_data_file = str(saved_path)
+        st.sidebar.success(f"Using uploaded workbook: {uploaded_xlsx.name}")
+    except Exception as e:
+        st.sidebar.error(f"Couldn't read that workbook ({e}). Using the bundled file instead.")
+
+if not Path(active_data_file).exists():
+    st.error(f"Capture workbook not found: {active_data_file}")
     st.stop()
 
-statements, ratios, checks, events, scorecard, prices, distress, beneish = load(DATA_FILE)
+statements, ratios, checks, events, scorecard, prices, distress, beneish = load(active_data_file)
+
+if uploaded_cf_csv is not None:
+    try:
+        new_cf = parse_cashflow_csv(uploaded_cf_csv.getvalue())
+        statements = pd.concat(
+            [statements[~((statements.statement == "cashflow") & statements.fy.isin(new_cf.fy))],
+             new_cf], ignore_index=True)
+        ratios = etl.build_ratios(statements)
+        checks = etl.run_checks(statements, prices)
+        scorecard = etl.build_scorecard(ratios)
+        years_str = ", ".join(str(int(y)) for y in sorted(new_cf.fy.unique()))
+        st.sidebar.success(f"Cash flow replaced for FY{years_str}.")
+    except Exception as e:
+        st.sidebar.error(f"Couldn't read that CSV ({e}). Cash flow from the workbook is unchanged.")
+
 base = an.base_position(ratios, statements)
 YEARS = sorted(ratios.index)
 
