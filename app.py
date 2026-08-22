@@ -60,11 +60,18 @@ DATA_FILE = "Steinhoff Data-Version 2 2026.xlsx"
 # to the peer EPS/DPS figures in the unit-corrected peer comparables. FLAGGED pending
 # verification against Steinhoff's published annual reports.
 STEINHOFF_DPS_EUR_CENTS = {2013: 5.82, 2014: 10.73, 2015: 10.73, 2016: 12.00, 2017: 3.00, 2018: 0.0}
-# The same source also carries a Steinhoff share-price series (2013 3.20 ... 2018 0.12,
-# apparently EUR Frankfurt-listing quotes). That series is NOT used here: it contradicts
-# the ZAR anchor points already captured in the main workbook's SharePrice_Data sheet
-# (e.g. R95.00 in April 2016 vs a EUR quote of 5.30 the same year), consistent with the
-# unit-corrected peer comparables' finding on this exact series.
+
+# The same source also carries a Steinhoff share-price series, apparently EUR Frankfurt-
+# listing quotes (comma decimals in the raw sheet, values an order of magnitude below the
+# ZAR anchor points for the same dates — e.g. 5.30 here vs R95.00 in the main workbook's
+# SharePrice_Data for April 2016). One point per fiscal year end, not a daily/weekly
+# series, so it does not help sub-question 4.4 — the ML tab needs lagged returns, moving
+# averages and rolling volatility, none of which are computable from annual points no
+# matter how many years are added. It IS a useful supplement to 4.2's collapse chart,
+# which otherwise has only 6 event-specific dates: shown as its own FLAGGED series,
+# converted to rand at the sidebar's EUR/ZAR rate, never merged into the sourced ZAR
+# anchor points above.
+STEINHOFF_SHARE_PRICE_EUR = {2013: 3.20, 2014: 4.60, 2015: 5.80, 2016: 5.30, 2017: 0.25, 2018: 0.12}
 
 st.set_page_config(page_title="Steinhoff Financial Intelligence Dashboard",
                    layout="wide", initial_sidebar_state="expanded")
@@ -241,13 +248,49 @@ else:
     dyn_checks.append(dict(fy=None, severity="Blocking", check="Dividend per share not captured",
                            detail="Required for sub-question 4.5."))
 if peer_pe or peer_ev or peer_pb:
-    dyn_checks.append(dict(fy=None, severity="High", check="Peer multiples partially verified",
+    dyn_checks.append(dict(fy=None, severity="High", check="Peer multiples rest on partial verification",
                            detail="Unit-corrected medians of Mr Price, Foschini and Lewis. The P/E "
-                                  "median is reliable; EV/EBITDA rests on two of three peers; P/B "
-                                  "spans 0.75x-6.30x. See the Valuation tab note for detail."))
+                                  "median is reliable; P/B spans 0.75x-6.30x across the three peers. "
+                                  "See the separate finding on Lewis's EBITDA and on the peer net-debt "
+                                  "unit inference below."))
 else:
     dyn_checks.append(dict(fy=None, severity="Blocking", check="Peer company multiples not captured",
                            detail="Required for sub-question 4.5."))
+
+# Errors, not uncertainty: these are wrong in the source, independent of any sidebar input.
+dyn_checks.append(dict(fy=None, severity="High",
+    check="Steinhoff's own EBITDA, net debt and book value (peer-file capture) are unusable",
+    detail="Declared in euros but with no declared scale — roughly three orders of magnitude "
+           "away from the main workbook, so the true figures could be off by a factor of about "
+           "a thousand either way. Not used: this dashboard sources Steinhoff's own EBITDA, net "
+           "debt and book value from the main workbook instead."))
+dyn_checks.append(dict(fy=None, severity="High",
+    check="Steinhoff's net debt (peer-file capture) stored as text, not a number",
+    detail="Captured as the string '8,800 euros' rather than a numeric value, and in a "
+           "different currency to the rest of the analysis. Not used, for the same reason "
+           "as the finding above."))
+dyn_checks.append(dict(fy=None, severity="High", check="Lewis Group's captured EBITDA looks miscaptured",
+    detail="Produces an EV/EBITDA of 0.76x against Mr Price's 13.31x and Foschini's 10.70x — not "
+           "a credible reading for a comparable retailer. The EV/EBITDA median used in the sidebar "
+           "(10.70x) is unaffected, since it is the middle of the three values, but the Lewis "
+           "figure itself should not be quoted on its own."))
+
+# Two of three peer net-debt figures were converted from an assumed unit (billions, not
+# millions) rather than a stated one, and no fiscal year is given for the peer figures —
+# both rest on inference, not error, and are unconditional on any sidebar input.
+dyn_checks.append(dict(fy=None, severity="High", check="Two peer net-debt figures rest on an assumed unit",
+    detail="Mr Price's -1.78 and Foschini's 6.87 are credible only as ZAR billions, not the "
+           "millions used elsewhere on the same sheet (Lewis's 158.7 is left as millions, for "
+           "the same reason). Converted accordingly, but unverified against the published "
+           "annual reports. The source also states no financial year for any peer figure, so "
+           "comparability across the three peers is not guaranteed."))
+dyn_checks.append(dict(fy=None, severity="High",
+    check="Supplementary Steinhoff share-price series is annual, not daily, and in EUR",
+    detail="One point per fiscal year end (2013-2018), shown on the Red flags & chronology "
+           "tab converted to rand at the sidebar's EUR/ZAR rate. Useful context for the "
+           "collapse narrative in 4.2; does not help 4.4, which needs daily or weekly "
+           "granularity to compute lagged returns, moving averages and rolling volatility — "
+           "no number of annual points substitutes for that."))
 checks_f = pd.concat([checks_f, pd.DataFrame(dyn_checks)], ignore_index=True)
 
 ke = an.cost_of_equity(risk_free, beta, erp)
@@ -661,23 +704,33 @@ with tabs[4]:
     else:
         exact = prices_f[prices_f["exact"]]
         fig = go.Figure()
-        fig.add_scatter(x=exact["date"], y=exact["price"], mode="lines+markers",
+        fig.add_scatter(x=exact["date"], y=exact["price"], mode="lines+markers", name="ZAR, sourced",
                         line=dict(color=PBI_BLUE, width=2),
                         marker=dict(size=12, color=[PHASE_COLOURS.get(p, MOSS)
                                                     for p in exact["phase"]]),
                         customdata=exact[["event", "source"]].values,
                         hovertemplate="%{x|%d %b %Y}<br>R%{y:,.2f}<br>%{customdata[0]}"
                                       "<extra></extra>")
+        eur_years = [y for y in STEINHOFF_SHARE_PRICE_EUR if year_lo <= y <= year_hi]
+        if eur_years:
+            eur_dates = [f"{y}-06-30" for y in eur_years]
+            eur_zar = [STEINHOFF_SHARE_PRICE_EUR[y] * zar_per_eur for y in eur_years]
+            fig.add_scatter(x=eur_dates, y=eur_zar, mode="lines+markers",
+                            name="EUR→ZAR, FLAGGED", line=dict(color=PBI_PINK, width=1.5, dash="dot"),
+                            marker=dict(size=9, symbol="diamond-open", color=PBI_PINK),
+                            hovertemplate="FY%{x}<br>R%{y:,.2f} (from EUR, unverified)<extra></extra>")
         fig.update_yaxes(type="log")
-        show(fig, 340)
-        st.caption("Sourced observations only, on a log scale. Points are coloured by phase.")
+        show(fig, 340, legend=bool(eur_years))
+        st.caption("Sourced ZAR observations plus, where available, Steinhoff's own annual "
+                   "share-price series converted from EUR at the sidebar's exchange rate. Log scale.")
         st.markdown("<div class='note crit'><b>These are anchor points, not a price series.</b> "
                     f"{len(prices_f)} sourced observations, {int(prices_f['exact'].sum())} carrying an "
-                    "exact price, and the crash-week figure is recorded as an unverified range. "
-                    "They chart the collapse honestly, but they cannot train a model: there is "
-                    "nothing to split into train and test, and drawing a line between them would "
-                    "invent the data the models are then scored on. A daily series for 2015 to "
-                    "2017 is what sub-question 4.4 needs.</div>", unsafe_allow_html=True)
+                    "exact price, and the crash-week figure is recorded as an unverified range. The "
+                    "EUR-converted annual points above don't change this: one point a year is still "
+                    "not enough to train a model on — there is nothing to split into train and test, "
+                    "and drawing a line between them would invent the data the models are then scored "
+                    "on, no matter how many years are added. A daily series for 2015 to 2017 is what "
+                    "sub-question 4.4 needs.</div>", unsafe_allow_html=True)
         st.dataframe(prices_f[["date", "event", "price_text", "market_cap", "source", "phase"]]
                      .rename(columns={"price_text": "price (ZAR)", "market_cap": "mkt cap (Rbn)"}),
                      use_container_width=True, hide_index=True)
@@ -815,22 +868,18 @@ with tabs[6]:
                     "share has been captured. Enter the base-year dividend in the sidebar, or "
                     "capture the dividend history, and the method appears above.</div>",
                     unsafe_allow_html=True)
-    st.markdown("<div class='note'><b>Peer multiples are sourced, with caveats.</b> The sidebar "
-                "defaults are unit-corrected medians of Mr Price, Foschini and Lewis (from a "
-                "capture that mixed cents/rand and millions/billions across companies — every "
-                "conversion is logged and re-derivable). The P/E median is reliable. EV/EBITDA "
-                "rests on two of three peers, since Lewis's captured EBITDA produces an implausible "
-                "0.76x and looks miscaptured rather than genuinely cheap. P/B spans 0.75x to 6.30x "
-                "across the three peers, so that cross-check carries the least weight. Two of the "
-                "three peer net-debt figures were converted on an inferred unit (billions, not "
-                "millions) and still await verification against the published annual reports, and "
-                "no financial year is stated for the peer figures in the source, so comparability "
-                "across peers is not guaranteed. The dividend now feeding the DDM above is also "
-                "FLAGGED: Steinhoff's own DPS history has no stated currency or unit in the source "
-                "capture, so it is read as EUR cents (the same inference already applied to the peer "
-                "EPS/DPS figures) and converted to rand at the sidebar's EUR/ZAR rate — both the unit "
-                "and the rate need verification against the published annual reports before this "
-                "method is quoted.</div>", unsafe_allow_html=True)
+    st.markdown("<div class='note'><b>Peer multiples and the dividend are sourced, with caveats.</b> "
+                "Two different kinds. Wrong, not just uncertain: Lewis's captured EBITDA produces an "
+                "implausible EV/EBITDA of 0.76x and should not be quoted on its own, though the "
+                "sidebar's EV/EBITDA median (10.70x) is unaffected since it sits between Mr Price's "
+                "and Foschini's readings. Uncertain, not wrong: two of the three peer net-debt figures "
+                "rest on an assumed unit, no fiscal year is stated for any peer figure so cross-peer "
+                "comparability isn't guaranteed, P/B spans 0.75x to 6.30x across the three peers, and "
+                "the dividend feeding the DDM above is read as EUR cents from an unlabelled capture "
+                "and converted at the sidebar's EUR/ZAR rate. All of it — including the peer file's "
+                "own Steinhoff EBITDA/net-debt/book-value figures, which are unusable outright and are "
+                "not used here — is itemised in the integrity register on the Data &amp; integrity "
+                "tab.</div>", unsafe_allow_html=True)
 
 
 # --------------------------------------------------------------------------
